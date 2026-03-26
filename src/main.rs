@@ -1,9 +1,15 @@
 use aws_config::BehaviorVersion;
+use aws_sdk_glue::operation::{get_database::GetDatabaseOutput, get_databases};
 use axum::{
-    Router,
-    extract::Path,
+    Json, Router,
+    extract::{Path, State},
     routing::{get, head, post},
 };
+use serde_json::{Value, json};
+
+use crate::models::ListNamespacesResponse;
+
+mod models;
 
 #[tokio::main]
 async fn main() {
@@ -46,7 +52,30 @@ async fn main() {
 async fn config() {}
 async fn get_catalog(Path(catalog): Path<String>) {}
 
-async fn get_namespaces(Path(catalog): Path<String>) {}
+async fn get_namespaces(
+    Path(catalog): Path<String>,
+    State(state): State<AWSClients>,
+) -> Json<Value> {
+    let databases_result = state
+        .glue
+        .get_databases()
+        .catalog_id(catalog)
+        .into_paginator()
+        .send()
+        .next()
+        .await
+        .unwrap();
+    let databases = match databases_result {
+        Ok(value) => value.database_list,
+        Err(e) => panic!("{}", e),
+    };
+
+    let response: models::ListNamespacesResponse = ListNamespacesResponse {
+        next_page_token: String::from(""),
+        namespaces: Vec::new(),
+    };
+    Json(serde_json::to_string(&response))
+}
 
 async fn load_namespace_metadata(Path((catalog, ns)): Path<(String, String)>) {}
 async fn update_namespace_properties(Path((catalog, ns)): Path<(String, String)>) {}
